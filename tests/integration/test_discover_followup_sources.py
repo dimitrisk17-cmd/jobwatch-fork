@@ -126,6 +126,92 @@ def test_discover_workday_api_posts_search_terms_and_builds_detail_urls(monkeypa
     assert "Compensation: $180,000 - $220,000 USD annually." in candidate.notes
 
 
+def test_discover_jobvite_enriches_candidates_with_detail_sections(monkeypatch):
+    source = discover_jobs.SourceConfig(
+        source="Example Jobvite",
+        url="https://jobs.jobvite.com/example/jobs",
+        discovery_mode="html",
+        last_checked=None,
+        cadence_group="every_3_runs",
+    )
+    listing_html = (
+        '<a href="/example/job/abc123" class="jv-job-list-link">'
+        '<div class="jv-job-list-name">Senior Product Manager</div>'
+        '<div class="jv-job-id">REQ-42</div>'
+        '<div class="jv-job-list-location">Remote, USA</div>'
+        '</a>'
+        '<a href="/example/job/def456" class="jv-job-list-link">'
+        '<div class="jv-job-list-name">Marketing Coordinator</div>'
+        '<div class="jv-job-id">REQ-99</div>'
+        '<div class="jv-job-list-location">Remote, USA</div>'
+        '</a>'
+    )
+    detail_html = (
+        "<h2>Responsibilities</h2>"
+        "<ul><li>Own the music discovery product roadmap.</li></ul>"
+        "<h2>Qualifications</h2>"
+        "<ul><li>7+ years of product management experience.</li></ul>"
+        "<h2>Pay Range</h2>"
+        "<p>$190,000 - $230,000 USD annually.</p>"
+    )
+
+    fetched_urls: list[str] = []
+
+    def fake_fetch_text(url: str, timeout_seconds: int) -> str:
+        fetched_urls.append(url)
+        if url == source.url:
+            return listing_html
+        return detail_html
+
+    monkeypatch.setattr(discover_http, "fetch_text", fake_fetch_text)
+
+    coverage = discover_jobs.discover_jobvite_jobs(source, ["product manager"], timeout_seconds=5)
+
+    assert coverage.enumerated_jobs == 2
+    assert coverage.matched_jobs == 1
+    assert coverage.direct_job_pages_opened == 1
+    assert coverage.status == "complete"
+    candidate = coverage.candidates[0]
+    assert candidate.url == "https://jobs.jobvite.com/example/job/abc123"
+    assert candidate.location == "Remote, USA"
+    assert "REQ-42" in candidate.notes
+    assert "Tasks: Own the music discovery product roadmap." in candidate.notes
+    assert "Qualifications: 7+ years of product management experience." in candidate.notes
+    assert "Compensation: $190,000 - $230,000 USD annually." in candidate.notes
+    assert fetched_urls == [source.url, candidate.url]
+
+
+def test_discover_jobvite_marks_partial_when_detail_fetch_fails(monkeypatch):
+    source = discover_jobs.SourceConfig(
+        source="Example Jobvite",
+        url="https://jobs.jobvite.com/example/jobs",
+        discovery_mode="html",
+        last_checked=None,
+        cadence_group="every_3_runs",
+    )
+    listing_html = (
+        '<a href="/example/job/abc123" class="jv-job-list-link">'
+        '<div class="jv-job-list-name">Senior Product Manager</div>'
+        '<div class="jv-job-id">REQ-42</div>'
+        '<div class="jv-job-list-location">Remote, USA</div>'
+        '</a>'
+    )
+
+    def fake_fetch_text(url: str, timeout_seconds: int) -> str:
+        if url == source.url:
+            return listing_html
+        raise RuntimeError("detail endpoint unavailable")
+
+    monkeypatch.setattr(discover_http, "fetch_text", fake_fetch_text)
+
+    coverage = discover_jobs.discover_jobvite_jobs(source, ["product manager"], timeout_seconds=5)
+
+    assert coverage.matched_jobs == 1
+    assert coverage.direct_job_pages_opened == 0
+    assert coverage.status == "partial"
+    assert any("Detail fetch failed" in limitation for limitation in coverage.limitations)
+
+
 def test_discover_workday_api_keeps_candidate_when_detail_fetch_fails(monkeypatch):
     source = discover_jobs.SourceConfig(
         source="Example Workday",
@@ -173,28 +259,36 @@ def test_discover_ashby_api_uses_non_user_graphql_payload(monkeypatch):
     )
 
     def fake_post_json(url: str, payload: object, timeout_seconds: int, headers: dict[str, str] | None = None):
-        assert url == "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams"
-        assert payload["variables"] == {"organizationHostedJobsPageName": "example"}
         assert headers == {"Referer": source.url}
-        return {
-            "data": {
-                "jobBoard": {
-                    "teams": [{"id": "eng", "externalName": "Engineering"}],
-                    "jobPostings": [
-                        {
-                            "id": "job-1",
-                            "title": "Security Engineer",
-                            "teamId": "eng",
-                            "locationName": "Remote",
-                            "secondaryLocations": [],
-                            "workplaceType": "Remote",
-                            "employmentType": "Full-time",
-                            "compensationTierSummary": "",
-                        }
-                    ],
+        if payload["operationName"] == "ApiJobBoardWithTeams":
+            assert url == "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams"
+            assert payload["variables"] == {"organizationHostedJobsPageName": "example"}
+            return {
+                "data": {
+                    "jobBoard": {
+                        "teams": [{"id": "eng", "externalName": "Engineering"}],
+                        "jobPostings": [
+                            {
+                                "id": "job-1",
+                                "title": "Security Engineer",
+                                "teamId": "eng",
+                                "locationName": "Remote",
+                                "secondaryLocations": [],
+                                "workplaceType": "Remote",
+                                "employmentType": "Full-time",
+                                "compensationTierSummary": "",
+                            }
+                        ],
+                    }
                 }
             }
+        assert payload["operationName"] == "ApiJobPosting"
+        assert url == "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobPosting"
+        assert payload["variables"] == {
+            "organizationHostedJobsPageName": "example",
+            "jobPostingId": "job-1",
         }
+        return {"data": {"jobPosting": {"descriptionHtml": "", "compensationTierSummary": ""}}}
 
     monkeypatch.setattr(discover_http, "post_json", fake_post_json)
 
@@ -219,28 +313,35 @@ def test_discover_ashby_api_decodes_percent_encoded_board_slug(monkeypatch):
     )
 
     def fake_post_json(url: str, payload: object, timeout_seconds: int, headers: dict[str, str] | None = None):
-        assert url == "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams"
-        assert payload["variables"] == {"organizationHostedJobsPageName": "Tools for Humanity"}
         assert headers == {"Referer": source.url}
-        return {
-            "data": {
-                "jobBoard": {
-                    "teams": [{"id": "eng", "externalName": "Engineering"}],
-                    "jobPostings": [
-                        {
-                            "id": "privacy-engineer",
-                            "title": "Privacy Engineer",
-                            "teamId": "eng",
-                            "locationName": "San Francisco, CA",
-                            "secondaryLocations": [{"locationName": "Munich, Germany"}],
-                            "workplaceType": "Hybrid",
-                            "employmentType": "Full-time",
-                            "compensationTierSummary": "",
-                        }
-                    ],
+        if payload["operationName"] == "ApiJobBoardWithTeams":
+            assert url == "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams"
+            assert payload["variables"] == {"organizationHostedJobsPageName": "Tools for Humanity"}
+            return {
+                "data": {
+                    "jobBoard": {
+                        "teams": [{"id": "eng", "externalName": "Engineering"}],
+                        "jobPostings": [
+                            {
+                                "id": "privacy-engineer",
+                                "title": "Privacy Engineer",
+                                "teamId": "eng",
+                                "locationName": "San Francisco, CA",
+                                "secondaryLocations": [{"locationName": "Munich, Germany"}],
+                                "workplaceType": "Hybrid",
+                                "employmentType": "Full-time",
+                                "compensationTierSummary": "",
+                            }
+                        ],
+                    }
                 }
             }
+        assert payload["operationName"] == "ApiJobPosting"
+        assert payload["variables"] == {
+            "organizationHostedJobsPageName": "Tools for Humanity",
+            "jobPostingId": "privacy-engineer",
         }
+        return {"data": {"jobPosting": {"descriptionHtml": "", "compensationTierSummary": ""}}}
 
     monkeypatch.setattr(discover_http, "post_json", fake_post_json)
 
@@ -252,6 +353,165 @@ def test_discover_ashby_api_decodes_percent_encoded_board_slug(monkeypatch):
     candidate = coverage.candidates[0]
     assert candidate.url == "https://jobs.ashbyhq.com/Tools%20for%20Humanity/privacy-engineer"
     assert candidate.location == "San Francisco, CA; Munich, Germany"
+
+
+def test_discover_ashby_api_enriches_candidates_with_detail_sections(monkeypatch):
+    source = discover_jobs.SourceConfig(
+        source="Example Ashby",
+        url="https://jobs.ashbyhq.com/example",
+        discovery_mode="ashby_api",
+        last_checked=None,
+        cadence_group="every_3_runs",
+    )
+    description_html = (
+        "<h2>What You'll Do</h2>"
+        "<ul><li>Own the music discovery product roadmap.</li></ul>"
+        "<h2>Who You Are</h2>"
+        "<ul><li>7+ years of product management experience.</li></ul>"
+        "<h2>Compensation:</h2>"
+        "<p>$280,000 to $340,000 base salary (before equity)</p>"
+        "<h2>Perks &amp; Benefits</h2>"
+        "<p>Catalogue of benefits that should not appear in tasks or qualifications.</p>"
+    )
+
+    def fake_post_json(url: str, payload: object, timeout_seconds: int, headers: dict[str, str] | None = None):
+        if payload["operationName"] == "ApiJobBoardWithTeams":
+            return {
+                "data": {
+                    "jobBoard": {
+                        "teams": [{"id": "prod", "externalName": "Product"}],
+                        "jobPostings": [
+                            {
+                                "id": "head-of-product",
+                                "title": "Head of Product",
+                                "teamId": "prod",
+                                "locationName": "New York, NY",
+                                "secondaryLocations": [],
+                                "workplaceType": "On-site",
+                                "employmentType": "Full-time",
+                                "compensationTierSummary": "$280K – $340K",
+                            }
+                        ],
+                    }
+                }
+            }
+        assert payload["operationName"] == "ApiJobPosting"
+        assert payload["variables"]["jobPostingId"] == "head-of-product"
+        return {
+            "data": {
+                "jobPosting": {
+                    "descriptionHtml": description_html,
+                    "compensationTierSummary": "$280K – $340K",
+                }
+            }
+        }
+
+    monkeypatch.setattr(discover_http, "post_json", fake_post_json)
+
+    coverage = discover_jobs.discover_ashby_api(source, ["head of product"], timeout_seconds=5)
+
+    assert coverage.status == "complete"
+    assert coverage.matched_jobs == 1
+    assert coverage.direct_job_pages_opened == 1
+    candidate = coverage.candidates[0]
+    assert "Tasks: Own the music discovery product roadmap." in candidate.notes
+    assert "Qualifications: 7+ years of product management experience." in candidate.notes
+    assert "Compensation: $280,000 to $340,000 base salary (before equity)" in candidate.notes
+    assert "Catalogue of benefits" not in candidate.notes
+
+
+def test_discover_ashby_api_falls_back_to_compensation_summary_when_section_missing(monkeypatch):
+    source = discover_jobs.SourceConfig(
+        source="Example Ashby",
+        url="https://jobs.ashbyhq.com/example",
+        discovery_mode="ashby_api",
+        last_checked=None,
+        cadence_group="every_3_runs",
+    )
+
+    def fake_post_json(url: str, payload: object, timeout_seconds: int, headers: dict[str, str] | None = None):
+        if payload["operationName"] == "ApiJobBoardWithTeams":
+            return {
+                "data": {
+                    "jobBoard": {
+                        "teams": [{"id": "prod", "externalName": "Product"}],
+                        "jobPostings": [
+                            {
+                                "id": "lead-pm",
+                                "title": "Lead Product Manager",
+                                "teamId": "prod",
+                                "locationName": "Remote",
+                                "secondaryLocations": [],
+                                "workplaceType": "Remote",
+                                "employmentType": "Full-time",
+                                "compensationTierSummary": "$180K – $280K • Offers Equity",
+                            }
+                        ],
+                    }
+                }
+            }
+        return {
+            "data": {
+                "jobPosting": {
+                    "descriptionHtml": (
+                        "<h2>Who You Are</h2>"
+                        "<ul><li>6+ years of product management experience.</li></ul>"
+                    ),
+                    "compensationTierSummary": "$180K – $280K • Offers Equity",
+                }
+            }
+        }
+
+    monkeypatch.setattr(discover_http, "post_json", fake_post_json)
+
+    coverage = discover_jobs.discover_ashby_api(source, ["lead product manager"], timeout_seconds=5)
+
+    assert coverage.matched_jobs == 1
+    candidate = coverage.candidates[0]
+    assert "Qualifications: 6+ years of product management experience." in candidate.notes
+    assert "Compensation: $180K – $280K" in candidate.notes
+
+
+def test_discover_ashby_api_marks_partial_when_detail_fetch_fails(monkeypatch):
+    source = discover_jobs.SourceConfig(
+        source="Example Ashby",
+        url="https://jobs.ashbyhq.com/example",
+        discovery_mode="ashby_api",
+        last_checked=None,
+        cadence_group="every_3_runs",
+    )
+
+    def fake_post_json(url: str, payload: object, timeout_seconds: int, headers: dict[str, str] | None = None):
+        if payload["operationName"] == "ApiJobBoardWithTeams":
+            return {
+                "data": {
+                    "jobBoard": {
+                        "teams": [{"id": "prod", "externalName": "Product"}],
+                        "jobPostings": [
+                            {
+                                "id": "lead-pm",
+                                "title": "Lead Product Manager",
+                                "teamId": "prod",
+                                "locationName": "Remote",
+                                "secondaryLocations": [],
+                                "workplaceType": "Remote",
+                                "employmentType": "Full-time",
+                                "compensationTierSummary": "",
+                            }
+                        ],
+                    }
+                }
+            }
+        raise RuntimeError("detail endpoint unavailable")
+
+    monkeypatch.setattr(discover_http, "post_json", fake_post_json)
+
+    coverage = discover_jobs.discover_ashby_api(source, ["lead product manager"], timeout_seconds=5)
+
+    assert coverage.matched_jobs == 1
+    assert coverage.direct_job_pages_opened == 0
+    assert coverage.status == "partial"
+    assert any("Detail fetch failed" in limitation for limitation in coverage.limitations)
 
 
 def test_eightfold_domain_for_source_supports_existing_infineon_mode():
@@ -649,3 +909,98 @@ def test_discover_ibm_api_filters_ibm_research_generic_noise_and_keeps_canary_de
     assert candidate.title == "Postdoctoral IT Research Scientist - IBM Research South Africa"
     assert candidate.matched_terms == ["postdoc", "postdoctoral", "research scientist"]
     assert "Summary: Join us for a unique 24-month paid internship" in candidate.notes
+
+
+
+def test_discover_krisp_jobs_extracts_role_detail_sections_from_detail_pages(monkeypatch):
+    source = discover_jobs.SourceConfig(
+        source="Krisp",
+        url="https://krisp.ai/careers/",
+        discovery_mode="html",
+        last_checked=None,
+        cadence_group="every_month",
+    )
+
+    careers_html = """
+    <html><body>
+      <a href="https://krisp.ai/jobs/senior-product-manager-cx/">Senior Product Manager, CX Armenia Hybrid</a>
+      <a href="https://krisp.ai/jobs/account-executive/">Account Executive US Remote</a>
+      <a href="https://krisp.ai/security">Security</a>
+      <a href="https://krisp.ai/careers/">Back to Careers</a>
+    </body></html>
+    """
+    detail_pages = {
+        "https://krisp.ai/jobs/senior-product-manager-cx": """
+        <html><head><title>Senior Product Manager, CX | Krisp</title></head><body>
+          <h1>Senior Product Manager, CX</h1>
+          <p>Armenia</p>
+          <p>Hybrid</p>
+          <p>About Krisp\u2019s CX portfolio.</p>
+          <h2>What you'll do</h2>
+          <ul>
+            <li>Define product strategy for Krisp\u2019s CX portfolio.</li>
+            <li>Collaborate with engineering, design, and data teams.</li>
+          </ul>
+          <h2>What we are looking for</h2>
+          <ul>
+            <li>5+ years of product management experience in B2B SaaS.</li>
+            <li>Strong analytical skills and data-driven decision-making.</li>
+          </ul>
+          <h2>How to apply</h2>
+          <p>Submit through this form.</p>
+          <h2>Benefits</h2>
+          <p>These benefits should not appear in tasks or qualifications notes.</p>
+        </body></html>
+        """,
+        "https://krisp.ai/jobs/account-executive": """
+        <html><head><title>Account Executive | Krisp</title></head><body>
+          <h1>Account Executive</h1>
+          <p>US</p>
+          <p>Remote</p>
+          <h2>Responsibilities</h2>
+          <ul><li>Build enterprise sales pipeline.</li></ul>
+          <h2>Requirements</h2>
+          <ul><li>5+ years of SaaS sales experience.</li></ul>
+        </body></html>
+        """,
+    }
+
+    def fake_fetch_text(url, timeout_seconds):
+        if url == source.url:
+            return careers_html
+        if url in detail_pages:
+            return detail_pages[url]
+        raise AssertionError(f"unexpected fetch_text({url})")
+
+    monkeypatch.setattr(discover_http, "fetch_text", fake_fetch_text)
+
+    coverage = discover_jobs.discover_krisp_jobs(
+        source,
+        ["product manager", "senior product manager"],
+        timeout_seconds=5,
+    )
+
+    assert coverage.status == "complete"
+    assert coverage.enumerated_jobs == 2
+    assert coverage.matched_jobs == 2
+    assert coverage.direct_job_pages_opened == 2
+
+    by_url = {c.url: c for c in coverage.candidates}
+    pm = by_url["https://krisp.ai/jobs/senior-product-manager-cx"]
+    assert pm.title == "Senior Product Manager, CX"
+    assert pm.location == "Armenia"
+    assert pm.remote == "Hybrid"
+    assert pm.matched_terms == ["product manager", "senior product manager"]
+    assert "Tasks: Define product strategy" in pm.notes
+    assert "Qualifications: 5+ years of product management experience" in pm.notes
+    assert "Benefits" not in pm.notes
+    assert "should not appear" not in pm.notes
+
+    ae = by_url["https://krisp.ai/jobs/account-executive"]
+    assert ae.title == "Account Executive"
+    assert ae.location == "US"
+    assert ae.remote == "Remote"
+    assert "Tasks: Build enterprise sales pipeline." in ae.notes
+    assert "Qualifications: 5+ years of SaaS sales experience." in ae.notes
+
+    assert "https://krisp.ai/security" not in by_url
