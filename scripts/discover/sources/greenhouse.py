@@ -10,6 +10,7 @@ Expected source URL shape:
 
 from __future__ import annotations
 
+from html import unescape
 from urllib.parse import urlparse
 
 from discover import helpers, http
@@ -146,7 +147,7 @@ def discover_greenhouse_api(source: SourceConfig, terms: list[str], timeout_seco
         if not isinstance(location_payload, dict):
             location_payload = {}
         location = location_payload.get("name") or "unknown"
-        content = job.get("content", "")
+        content = unescape(job.get("content", "") or "")
         searchable_text = f"{title} {location} {content}"
         matched = helpers.match_terms(searchable_text, terms)
         if not helpers.should_keep_candidate(title, matched, searchable_text):

@@ -122,6 +122,45 @@ def test_enrich_caps_fetches_per_source(monkeypatch):
     assert candidates[2].description == ""
     assert candidates[3].description == ""
     assert candidates[4].description == ""
+    assert any("budget exhausted" in lim for lim in coverage.limitations)
+
+
+def test_enrich_stops_when_wall_clock_budget_exhausted(monkeypatch):
+    fetched_urls: list[str] = []
+    fake_now = [0.0]
+
+    def fake_monotonic() -> float:
+        return fake_now[0]
+
+    def fake_fetch_text(url: str, timeout_seconds: int) -> str:
+        fetched_urls.append(url)
+        # Each fetch advances the wall clock by 0.4 seconds.
+        fake_now[0] += 0.4
+        return f"<p>JD for {url}</p>"
+
+    monkeypatch.setattr(http, "fetch_text", fake_fetch_text)
+    monkeypatch.setattr("time.monotonic", fake_monotonic)
+
+    candidates = [
+        Candidate(
+            employer="Example",
+            title=f"Role {idx}",
+            url=f"https://example.com/jobs/{idx}",
+            source_url="https://example.com/jobs",
+        )
+        for idx in range(20)
+    ]
+    coverage = _coverage(candidates)
+
+    enrich_candidate_descriptions(coverage, timeout_seconds=5, max_seconds=1.0)
+
+    # Budget = 1.0s, each fetch advances 0.4s. The loop checks the clock BEFORE
+    # the fetch, so fetches happen at t=0.0, 0.4, 0.8; the next check at t=1.2
+    # exits the loop. Expect exactly 3 fetches before exhaustion.
+    assert len(fetched_urls) == 3
+    assert any("budget exhausted" in lim for lim in coverage.limitations)
+    unfilled = sum(1 for c in candidates if not c.description)
+    assert unfilled == len(candidates) - 3
 
 
 def test_enrich_truncates_to_char_budget(monkeypatch):
