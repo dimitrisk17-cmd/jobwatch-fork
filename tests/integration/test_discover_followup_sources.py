@@ -924,7 +924,7 @@ def test_discover_krisp_jobs_extracts_role_detail_sections_from_detail_pages(mon
     careers_html = """
     <html><body>
       <a href="https://krisp.ai/jobs/senior-product-manager-cx/">Senior Product Manager, CX Armenia Hybrid</a>
-      <a href="https://krisp.ai/jobs/account-executive/">Account Executive US Remote</a>
+      <a href="https://krisp.ai/jobs/senior-product-manager-growth/">Senior Product Manager, Growth US Remote</a>
       <a href="https://krisp.ai/security">Security</a>
       <a href="https://krisp.ai/careers/">Back to Careers</a>
     </body></html>
@@ -952,15 +952,15 @@ def test_discover_krisp_jobs_extracts_role_detail_sections_from_detail_pages(mon
           <p>These benefits should not appear in tasks or qualifications notes.</p>
         </body></html>
         """,
-        "https://krisp.ai/jobs/account-executive": """
-        <html><head><title>Account Executive | Krisp</title></head><body>
-          <h1>Account Executive</h1>
+        "https://krisp.ai/jobs/senior-product-manager-growth": """
+        <html><head><title>Senior Product Manager, Growth | Krisp</title></head><body>
+          <h1>Senior Product Manager, Growth</h1>
           <p>US</p>
           <p>Remote</p>
           <h2>Responsibilities</h2>
-          <ul><li>Build enterprise sales pipeline.</li></ul>
+          <ul><li>Own the growth funnel for Krisp\u2019s self-serve plans.</li></ul>
           <h2>Requirements</h2>
-          <ul><li>5+ years of SaaS sales experience.</li></ul>
+          <ul><li>5+ years of growth product management experience.</li></ul>
         </body></html>
         """,
     }
@@ -996,11 +996,12 @@ def test_discover_krisp_jobs_extracts_role_detail_sections_from_detail_pages(mon
     assert "Benefits" not in pm.notes
     assert "should not appear" not in pm.notes
 
-    ae = by_url["https://krisp.ai/jobs/account-executive"]
-    assert ae.title == "Account Executive"
-    assert ae.location == "US"
-    assert ae.remote == "Remote"
-    assert "Tasks: Build enterprise sales pipeline." in ae.notes
-    assert "Qualifications: 5+ years of SaaS sales experience." in ae.notes
+    growth = by_url["https://krisp.ai/jobs/senior-product-manager-growth"]
+    assert growth.title == "Senior Product Manager, Growth"
+    assert growth.location == "US"
+    assert growth.remote == "Remote"
+    assert growth.matched_terms == ["product manager", "senior product manager"]
+    assert "Tasks: Own the growth funnel for Krisp’s self-serve plans." in growth.notes
+    assert "Qualifications: 5+ years of growth product management experience." in growth.notes
 
     assert "https://krisp.ai/security" not in by_url
