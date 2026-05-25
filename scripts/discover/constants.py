@@ -22,10 +22,12 @@ TECHNICAL_TITLE_HINTS = (
     "crypt",
     "protocol",
     "verification",
+    "product",
 )
 
+# Function-name excludes only. "manager" is a level, not a function, and belongs
+# to the term-match step (track-specific) rather than this shared filter.
 NON_TECHNICAL_TITLE_HINTS = (
-    "manager",
     "account executive",
     "recruit",
     "sales",
