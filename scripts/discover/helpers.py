@@ -328,3 +328,5 @@ def merge_candidate(candidates_by_url: dict[str, Candidate], candidate: Candidat
         existing.remote = candidate.remote
     if candidate.notes and candidate.notes not in existing.notes:
         existing.notes = "; ".join(part for part in [existing.notes, candidate.notes] if part)
+    if candidate.description and candidate.description not in existing.description:
+        existing.description = " ".join(part for part in [existing.description, candidate.description] if part)

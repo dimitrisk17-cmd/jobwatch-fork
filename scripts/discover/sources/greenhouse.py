@@ -13,7 +13,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from discover import helpers, http
-from discover.core import Candidate, Coverage, SourceConfig
+from discover.core import JD_DESCRIPTION_CHAR_BUDGET, Candidate, Coverage, SourceConfig
 from discover.registry import SourceAdapter
 
 
@@ -161,6 +161,9 @@ def discover_greenhouse_api(source: SourceConfig, terms: list[str], timeout_seco
                 location=location,
                 matched_terms=matched,
                 notes=build_greenhouse_candidate_notes(content),
+                description=helpers.truncate_text(
+                    greenhouse_content_text(content), JD_DESCRIPTION_CHAR_BUDGET
+                ),
             ),
         )
 

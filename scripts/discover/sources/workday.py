@@ -12,7 +12,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from discover import helpers, http
-from discover.core import Candidate, Coverage, SourceConfig
+from discover.core import JD_DESCRIPTION_CHAR_BUDGET, Candidate, Coverage, SourceConfig
 from discover.registry import SourceAdapter
 
 
@@ -248,10 +248,16 @@ def discover_workday_api(source: SourceConfig, terms: list[str], timeout_seconds
             limitations.append(f"Detail fetch failed for {candidate_url}")
             continue
         direct_job_pages_opened += 1
-        sections = extract_workday_detail_sections(posting_info.get("jobDescription") or "")
+        job_description_html = posting_info.get("jobDescription") or ""
+        sections = extract_workday_detail_sections(job_description_html)
         detail_parts = build_workday_detail_note_parts(sections)
         if detail_parts:
             candidate.notes = "; ".join(part for part in [candidate.notes, *detail_parts] if part)
+        description_text = helpers.normalize_whitespace(
+            " ".join(helpers.extract_visible_text_lines_from_html(job_description_html))
+        )
+        if description_text:
+            candidate.description = helpers.truncate_text(description_text, JD_DESCRIPTION_CHAR_BUDGET)
 
     if errored_terms:
         limitations.append("Errored terms: " + ", ".join(sorted(set(errored_terms))))

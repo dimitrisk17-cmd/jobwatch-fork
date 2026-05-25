@@ -13,7 +13,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from discover import helpers, http
-from discover.core import Candidate, Coverage, SourceConfig
+from discover.core import JD_DESCRIPTION_CHAR_BUDGET, Candidate, Coverage, SourceConfig
 from discover.registry import SourceAdapter
 
 
@@ -43,6 +43,19 @@ def _posting_notes(posting: dict[str, object]) -> str:
     if not detail_parts:
         return ""
     return "Description: " + helpers.truncate_text(" ".join(detail_parts), 480)
+
+
+def _posting_description(posting: dict[str, object]) -> str:
+    detail_parts: list[str] = []
+    for key in ("descriptionPlain", "additionalPlain"):
+        value = posting.get(key)
+        if isinstance(value, str):
+            cleaned = helpers.normalize_whitespace(value)
+            if cleaned:
+                detail_parts.append(cleaned)
+    if not detail_parts:
+        return ""
+    return helpers.truncate_text(" ".join(detail_parts), JD_DESCRIPTION_CHAR_BUDGET)
 
 
 def discover_lever_json(source: SourceConfig, terms: list[str], timeout_seconds: int) -> Coverage:
@@ -84,6 +97,7 @@ def discover_lever_json(source: SourceConfig, terms: list[str], timeout_seconds:
                 location=location,
                 matched_terms=matched,
                 notes=_posting_notes(posting),
+                description=_posting_description(posting),
             ),
         )
 

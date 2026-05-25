@@ -35,6 +35,7 @@ class Candidate:
     remote: str = "unknown"
     matched_terms: list[str] = field(default_factory=list)
     notes: str = ""
+    description: str = ""
 
 
 @dataclass
@@ -138,6 +139,54 @@ def failed_coverage(source: SourceConfig, terms: list[str], limitation: str) -> 
     )
 
 
+JD_DESCRIPTION_CHAR_BUDGET = 6000
+MAX_JD_FETCHES_PER_SOURCE = 30
+
+
+def enrich_candidate_descriptions(
+    coverage: Coverage,
+    timeout_seconds: int,
+    *,
+    char_budget: int = JD_DESCRIPTION_CHAR_BUDGET,
+    max_fetches: int = MAX_JD_FETCHES_PER_SOURCE,
+) -> None:
+    """Fetch each matched candidate's URL and store the JD body in `description`.
+
+    Skips candidates that already have a description (providers can pre-populate it
+    from data they already fetched). Bounded by `max_fetches` per source. Per-candidate
+    fetch failures are recorded as a single coverage limitation rather than aborting.
+    """
+
+    from discover import helpers, http
+
+    fetched = 0
+    failures = 0
+    for candidate in coverage.candidates:
+        if candidate.description:
+            continue
+        if fetched >= max_fetches:
+            break
+        url = candidate.url
+        if not url or not url.lower().startswith(("http://", "https://")):
+            continue
+        try:
+            html = http.fetch_text(url, timeout_seconds)
+        except Exception:
+            failures += 1
+            continue
+        fetched += 1
+        text = helpers.normalize_whitespace(
+            " ".join(helpers.extract_visible_text_lines_from_html(html))
+        )
+        if not text:
+            continue
+        if len(text) > char_budget:
+            text = helpers.truncate_text(text, char_budget)
+        candidate.description = text
+    if failures:
+        coverage.limitations.append(f"JD fetch failed for {failures} candidate(s)")
+
+
 def discover_source(source: SourceConfig, terms: list[str], timeout_seconds: int) -> Coverage:
     """Dispatch a source through the provider registry with legacy failure semantics."""
 
@@ -147,6 +196,8 @@ def discover_source(source: SourceConfig, terms: list[str], timeout_seconds: int
     if not adapter:
         return failed_coverage(source, terms, f"Unsupported discovery_mode: {source.discovery_mode}")
     try:
-        return attach_source_identity(source, adapter.discover(source, terms, timeout_seconds))
+        coverage = attach_source_identity(source, adapter.discover(source, terms, timeout_seconds))
     except Exception as exc:  # pragma: no cover - defensive output for live runs
         return failed_coverage(source, terms, f"{type(exc).__name__}: {exc}")
+    enrich_candidate_descriptions(coverage, timeout_seconds)
+    return coverage
