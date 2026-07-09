@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_provider import build_coder_command, resolve_agent_bin, resolve_agent_provider
+from runtime_env import RuntimeEnvError, apply_runtime_env
 from source_config import SourceConfigError, load_sources_config
 from source_quality import DEFAULT_REVIEW_TIMEOUT_SECONDS, generated_at, source_slug, truncate_text
 
@@ -784,7 +785,7 @@ def build_coder_prompt(
             f"- If the suggested strategy is config tuning, update only this source's `sources.json` entry, run `./.venv/bin/python scripts/render_sources_md.py --track {track}`, then run source-scoped discovery before considering code.",
             "- If the suggested strategy is provider_filter_support, keep the existing config and add reusable provider support for those configured native filters.",
             "- If the suggested strategy is dedicated_provider_logic, make the narrowest provider change needed for this source or source family.",
-            f"- URL/mode pivot exception: if your investigation shows the configured URL points at a dead, deprecated, or wrong endpoint (HTTP 500 maintenance, decommissioned ATS tenant, migrated to a different platform) and a different host serves the same employer's current jobs under a `discovery_mode` already implemented in `scripts/discover/sources/` (e.g., greenhouse_api, workday_api, eightfold_api, lever, ashby, personio, recruitee, workable, getro), update this source's `url` and `discovery_mode` in `tracks/{track}/sources.json` to point at the working endpoint, run `./.venv/bin/python scripts/render_sources_md.py --track {track}`, then run source-scoped rediscovery to validate. This pivot is allowed even when the suggested strategy is `dedicated_provider_logic`, because writing new provider logic is wasteful when an existing provider already covers the employer's new ATS. Do not invent a new `discovery_mode`; only pivot to one already registered.",
+            f"- URL/mode pivot exception: if your investigation shows the configured URL points at a dead, deprecated, or wrong endpoint (HTTP 500 maintenance, decommissioned ATS tenant, migrated to a different platform) and a different host serves the same employer's current jobs under a `discovery_mode` already implemented in `scripts/discover/sources/` (e.g., greenhouse_api, workday_api, eightfold_api, lever_json, ashby_api, personio_page, recruitee_inline, workable_api, getro_api), update this source's `url` and `discovery_mode` in `tracks/{track}/sources.json` to point at the working endpoint, run `./.venv/bin/python scripts/render_sources_md.py --track {track}`, then run source-scoped rediscovery to validate. This pivot is allowed even when the suggested strategy is `dedicated_provider_logic`, because writing new provider logic is wasteful when an existing provider already covers the employer's new ATS. Do not invent a new `discovery_mode`; only pivot to one already registered.",
             "- Avoid one-off branches in `scripts/discover/sources/generic_html.py` when the source is part of a reusable ATS or job-board family.",
             "- Config suggestion:",
             json.dumps(config_suggestion, ensure_ascii=False, indent=2),
@@ -938,6 +939,15 @@ def main() -> int:
     parser.add_argument("--idle-timeout-seconds", type=int, default=90, help="Abort a coding integration attempt if it produces no new output for this many seconds")
     parser.add_argument("--max-attempts", type=int, default=2, help="Maximum coding integration attempts")
     args = parser.parse_args()
+
+    try:
+        apply_runtime_env(load_secrets=False)
+    except RuntimeEnvError as exc:
+        print(f"source_integration.py: {exc}", file=sys.stderr)
+        return 1
+
+    global WORK_ROOT
+    WORK_ROOT = Path(os.environ.get("JOB_AGENT_ROOT", REPO_ROOT))
 
     artifact_path = Path(args.artifact_path) if args.artifact_path else default_artifact_path(args.track, args.today)
     fresh_artifact_path = default_fresh_artifact_path(args.track, args.source, args.today)

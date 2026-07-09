@@ -67,6 +67,7 @@ from discover.runner import (
     source_to_dict,
     write_output_text,
 )
+from discover.sources.apple import discover_apple_jobs
 from discover.sources.ashby import ASHBY_JOB_BOARD_QUERY, discover_ashby_api
 from discover.sources.bundeswehr import (
     BUNDESWEHR_COMPENSATION_HEADINGS,
@@ -151,6 +152,7 @@ from discover.sources.eightfold import (
     discover_infineon_api,
     eightfold_domain_for_source,
 )
+from discover.sources.ecb import ECB_DEFAULT_FEED_URL, discover_ecb_avature_rss, ecb_avature_feed_url
 from discover.sources.enbw import (
     ENBW_RESULTS_PAGE_SIZE,
     build_enbw_apply_url,
@@ -163,8 +165,7 @@ from discover.sources.generic_html import (
     discover_cybernetica_teamdash,
     discover_filtered_html_links,
     discover_html,
-    discover_jobvite_jobs,
-    discover_krisp_jobs,
+    discover_knds_jobboard,
     discover_secunet_jobboard,
     is_same_page_link,
     looks_like_non_job_link,

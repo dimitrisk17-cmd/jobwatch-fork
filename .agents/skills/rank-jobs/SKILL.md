@@ -54,9 +54,11 @@ Down-rank roles that:
 Base the ranking on visible evidence from the posting plus the user's documented profile and preferences.
 
 For each candidate in the discovery artifact, the `description` field holds the
-fetched JD body. Treat that as the primary fit evidence — read it before
-scoring. Do not score from the title and location alone when a description is
-present. The `notes` field is enumeration/diagnostic metadata, not the JD.
+fetched JD body (bounded to a shared character budget; `description_truncated`
+marks bodies that were cut). Treat that as the primary fit evidence — read it
+before scoring. Do not score from the title and location alone when a
+description is present. The `notes` field is enumeration/diagnostic metadata,
+not the JD.
 
 If `description` is empty or missing for a candidate, say so in `concerns`
 rather than scoring high on title alone. Use `likely` or `appears` when you

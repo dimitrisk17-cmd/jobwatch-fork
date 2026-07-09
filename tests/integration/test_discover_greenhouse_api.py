@@ -37,6 +37,7 @@ def test_discover_greenhouse_api_populates_description_from_html_content(monkeyp
     assert "Build applied cryptography systems for privacy products." in candidate.description
     assert "Security engineering experience required." in candidate.description
     assert "<p>" not in candidate.description
+    assert candidate.description_truncated is False
 
 
 def test_discover_greenhouse_api_unescapes_html_entities_in_content(monkeypatch):

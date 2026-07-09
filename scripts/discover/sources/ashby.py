@@ -13,7 +13,7 @@ from __future__ import annotations
 from urllib.parse import unquote, urlparse
 
 from discover import helpers, http
-from discover.core import JD_DESCRIPTION_CHAR_BUDGET, Candidate, Coverage, SourceConfig
+from discover.core import Candidate, Coverage, SourceConfig
 from discover.registry import SourceAdapter
 
 
@@ -284,11 +284,7 @@ def discover_ashby_api(source: SourceConfig, terms: list[str], timeout_seconds: 
         detail_parts = build_ashby_detail_note_parts(sections, detail_compensation_summary)
         if detail_parts:
             candidate.notes = "; ".join(part for part in [candidate.notes, *detail_parts] if part)
-        description_text = helpers.normalize_whitespace(
-            " ".join(helpers.extract_visible_text_lines_from_html(description_html))
-        )
-        if description_text:
-            candidate.description = helpers.truncate_text(description_text, JD_DESCRIPTION_CHAR_BUDGET)
+        helpers.set_candidate_description(candidate, helpers.visible_text_from_html(description_html))
 
     return Coverage(
         source=source.source,

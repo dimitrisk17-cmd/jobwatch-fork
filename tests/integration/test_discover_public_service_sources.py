@@ -176,6 +176,94 @@ def test_discover_verfassungsschutz_rss_filters_to_relevant_roles(monkeypatch):
     assert "Profile: Master in Informatik, Mathematik oder Cybersecurity." in candidate.notes
 
 
+def test_discover_ecb_avature_rss_extracts_digital_euro_roles(monkeypatch):
+    source = discover_jobs.SourceConfig(
+        source="ECB / EZB",
+        url="https://talent.ecb.europa.eu/careers/SearchJobs?jobRecordsPerPage=50",
+        discovery_mode="ecb_avature_rss",
+        last_checked=None,
+        cadence_group="every_run",
+    )
+    digital_euro_url = (
+        "https://talent.ecb.europa.eu/careers/JobDetail/"
+        "Market-Infrastructure-Experts-offline-technology-Digital-Euro-Project/14067"
+    )
+    finance_url = "https://talent.ecb.europa.eu/careers/JobDetail/Finance-Expert/14096"
+    xml_text = f"""
+    <rss><channel>
+      <item>
+        <title>Market Infrastructure Experts (offline technology) - Digital Euro Project</title>
+        <link>{digital_euro_url}</link>
+        <description></description>
+        <pubDate>Tue, 19 May 2026 00:00:00 +0000</pubDate>
+      </item>
+      <item>
+        <title>Finance Expert in the Budgeting and Controlling Division</title>
+        <link>{finance_url}</link>
+        <description></description>
+        <pubDate>Mon, 11 May 2026 00:00:00 +0000</pubDate>
+      </item>
+    </channel></rss>
+    """
+    detail_html = """
+    <html><body>
+      <p class="paragraph ">
+        <span data-map="item-title"><strong>Role specialisation</strong></span>
+        <span data-map="item-value">Market Infrastructure Project Management</span>
+      </p>
+      <p class="paragraph ">
+        <span data-map="item-title"><strong>Place of work</strong></span>
+        <span data-map="item-value">Frankfurt am Main, Germany</span>
+      </p>
+      <p class="paragraph ">
+        <span data-map="item-title"><strong>Closing date</strong></span>
+        <span data-map="item-value">09.06.2026</span>
+      </p>
+      <p class="paragraph view__separator">
+        <span data-map="item-title"><strong>Your role</strong></span>
+        <span data-map="item-value">
+          <div><ul>
+            <li>Ensure offline use cases incorporate strong privacy protections.</li>
+            <li>Collaborate with usability, security and technical experts.</li>
+          </ul></div>
+        </span>
+      </p>
+      <p class="paragraph view__separator">
+        <span data-map="item-title"><strong>Qualifications, experience and skills</strong></span>
+        <span data-map="item-value">
+          A master's degree in STEM and experience in applied cryptography or a security-related domain.
+        </span>
+      </p>
+    </body></html>
+    """
+
+    def fake_fetch_text(url: str, timeout_seconds: int) -> str:
+        if url.endswith("/careers/SearchJobs/feed/?jobRecordsPerPage=50"):
+            return xml_text
+        assert url == digital_euro_url
+        return detail_html
+
+    monkeypatch.setattr(discover_http, "fetch_text", fake_fetch_text)
+
+    coverage = discover_jobs.discover_ecb_avature_rss(
+        source,
+        ["Digital Euro", "Market Infrastructure", "offline technology", "privacy", "cryptography", "security"],
+        timeout_seconds=5,
+    )
+
+    assert coverage.status == "complete"
+    assert coverage.enumerated_jobs == 2
+    assert coverage.direct_job_pages_opened == 1
+    assert coverage.matched_jobs == 1
+    candidate = coverage.candidates[0]
+    assert candidate.title == "Market Infrastructure Experts (offline technology) - Digital Euro Project"
+    assert candidate.url == digital_euro_url
+    assert candidate.location == "Frankfurt am Main, Germany"
+    assert "Deadline: 09.06.2026" in candidate.notes
+    assert "Tasks: Ensure offline use cases incorporate strong privacy protections." in candidate.notes
+    assert "Qualifications: A master's degree in STEM" in candidate.notes
+
+
 def test_discover_auswaertiges_amt_json_extracts_structured_listings(monkeypatch):
     source = discover_jobs.SourceConfig(
         source="Auswärtiges Amt",
@@ -228,6 +316,144 @@ def test_discover_auswaertiges_amt_json_extracts_structured_listings(monkeypatch
     candidate = coverage.candidates[0]
     assert candidate.title == "Referent*in IT-Sicherheit im Auswärtigen Dienst"
     assert candidate.location == "Berlin"
+
+
+def test_discover_knds_jobboard_follows_listing_and_rejects_navigation(monkeypatch):
+    source = discover_jobs.SourceConfig(
+        source="KNDS",
+        url="https://jobs.knds.de/content/search/?locale=de_DE",
+        discovery_mode="knds_jobboard",
+        last_checked=None,
+        cadence_group="every_run",
+    )
+    landing_html = """
+    <html><body>
+      <a href="/content/mission?locale=de_DE">Die Mission</a>
+      <a href="/content/benefits?locale=de_DE">Benefits</a>
+      <a href="/viewalljobs/content/search?locale=de_DE">Offene Stellen</a>
+    </body></html>
+    """
+    listing_html = """
+    <html><body>
+      <a href="/content/application?locale=de_DE">Bewerbung</a>
+      <a href="/job/Muenchen-IT-Security-Engineer-12345/12345/?locale=de_DE">IT Security Engineer</a>
+      <a href="/job/Kassel-Sachbearbeitung-Personal-67890/67890/?locale=de_DE">Sachbearbeitung Personal</a>
+    </body></html>
+    """
+
+    def fake_fetch_text(url: str, timeout_seconds: int) -> str:
+        if url == source.url:
+            return landing_html
+        assert url == "https://jobs.knds.de/viewalljobs/content/search?locale=de_DE"
+        return listing_html
+
+    monkeypatch.setattr(discover_http, "fetch_text", fake_fetch_text)
+
+    coverage = discover_jobs.discover_knds_jobboard(
+        source,
+        ["Kryptographie", "IT-Sicherheit", "IT Security"],
+        timeout_seconds=5,
+    )
+
+    assert coverage.status == "complete"
+    assert coverage.listing_pages_scanned == 2
+    assert coverage.enumerated_jobs == 2
+    assert coverage.matched_jobs == 1
+    candidate = coverage.candidates[0]
+    assert candidate.title == "IT Security Engineer"
+    assert candidate.url == "https://jobs.knds.de/job/Muenchen-IT-Security-Engineer-12345/12345?locale=de_DE"
+    assert candidate.matched_terms == ["IT Security"]
+
+
+def test_discover_knds_jobboard_uses_native_api_when_jobs_are_not_static(monkeypatch):
+    source = discover_jobs.SourceConfig(
+        source="KNDS",
+        url="https://jobs.knds.de/content/search/?locale=de_DE",
+        discovery_mode="knds_jobboard",
+        last_checked=None,
+        cadence_group="every_run",
+    )
+    landing_html = """
+    <html><body>
+      <a href="/content/mission?locale=de_DE">Die Mission</a>
+      <a href="/content/benefits?locale=de_DE">Benefits</a>
+      <a href="/viewalljobs/content/search?locale=de_DE">Offene Stellen</a>
+    </body></html>
+    """
+    listing_html = """
+    <html><body>
+      <a href="/content/application?locale=de_DE">Bewerbung</a>
+    </body></html>
+    """
+    api_searches: list[str] = []
+
+    def fake_fetch_text(url: str, timeout_seconds: int) -> str:
+        if url == source.url:
+            return landing_html
+        if url == "https://jobs.knds.de/viewalljobs/content/search?locale=de_DE":
+            return listing_html
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(discover_http, "fetch_text", fake_fetch_text)
+
+    def fake_post_json(url: str, payload: dict[str, object], timeout_seconds: int, headers: dict[str, str] | None = None):
+        assert url == "https://production.api.recruiting-solutions.org/search"
+        assert headers is not None
+        assert headers["customerId"] == "knds-prod"
+        search = str(payload["search"])
+        api_searches.append(search)
+        if "IT-Security" in search:
+            return {
+                "@odata.count": 1,
+                "value": [
+                    {
+                        "jobId": "3507",
+                        "title": "IT-Security Administrator (m/w/d)",
+                        "link": "https://jobs.knds.de/job-invite/3507/?locale=de_DE",
+                        "addresses": [{"city": "München"}],
+                        "category": ["IT"],
+                        "profile": "<p>Netzwerk- und Security-Administration.</p>",
+                        "tasks": "<p>Operate protected infrastructure.</p>",
+                    }
+                ],
+            }
+        if "Informationssicherheit" in search:
+            return {
+                "@odata.count": 1,
+                "value": [
+                    {
+                        "jobId": "3615",
+                        "title": "Cyber Security Engineer (m/w/d)",
+                        "link": "https://jobs.knds.de/job-invite/3615/?locale=de_DE",
+                        "addresses": [{"city": "Konstanz"}],
+                        "category": ["Entwicklung"],
+                        "profile": "<p>Fundierte Kenntnisse in Informationssicherheit und IT-Sicherheit.</p>",
+                        "tasks": "<p>Security engineering for protected platforms.</p>",
+                    }
+                ],
+            }
+        return {"@odata.count": 0, "value": []}
+
+    monkeypatch.setattr(discover_http, "post_json", fake_post_json)
+
+    coverage = discover_jobs.discover_knds_jobboard(
+        source,
+        ["Kryptographie", "IT-Sicherheit", "IT Security"],
+        timeout_seconds=5,
+    )
+
+    assert coverage.status == "complete"
+    assert coverage.listing_pages_scanned == 2
+    assert coverage.enumerated_jobs == 2
+    assert coverage.matched_jobs == 2
+    assert "knds_api_queries=6" in coverage.result_pages_scanned
+    assert "/.*IT-Security.*/" in api_searches
+    assert "/.*Informationssicherheit.*/" in api_searches
+    by_title = {candidate.title: candidate for candidate in coverage.candidates}
+    assert by_title["IT-Security Administrator (m/w/d)"].matched_terms == ["IT Security"]
+    assert by_title["IT-Security Administrator (m/w/d)"].location == "München"
+    assert by_title["Cyber Security Engineer (m/w/d)"].matched_terms == ["IT-Sicherheit"]
+    assert by_title["Cyber Security Engineer (m/w/d)"].url == "https://jobs.knds.de/job-invite/3615?locale=de_DE"
 
 
 def test_discover_enbw_phenom_paginates_embedded_search_payload(monkeypatch):

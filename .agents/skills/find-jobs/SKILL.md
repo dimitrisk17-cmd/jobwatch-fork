@@ -81,9 +81,10 @@ For each plausible role in the artifact, extract:
 - notes on uncertainty or missing data
 
 Each candidate in the discovery artifact carries a `description` field with the
-fetched JD body. Base the responsibilities and requirements summaries on that
-field. The `notes` field is enumeration/diagnostic metadata; do not treat it as
-the JD body.
+fetched JD body, bounded to a shared character budget; `description_truncated`
+marks bodies that were cut. Base the responsibilities and requirements
+summaries on that field. The `notes` field is enumeration/diagnostic metadata;
+do not treat it as the JD body.
 
 If `description` is empty or missing, the JD could not be fetched — say so in
 `Missing / uncertain` rather than guessing from the title.

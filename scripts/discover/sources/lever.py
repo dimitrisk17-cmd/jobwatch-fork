@@ -13,7 +13,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from discover import helpers, http
-from discover.core import JD_DESCRIPTION_CHAR_BUDGET, Candidate, Coverage, SourceConfig
+from discover.core import Candidate, Coverage, SourceConfig
 from discover.registry import SourceAdapter
 
 
@@ -32,30 +32,22 @@ def lever_api_url(source_url: str) -> str:
     return f"{parsed.scheme or 'https'}://{api_host}/v0/postings/{token}?mode=json"
 
 
+def _posting_detail_text(posting: dict[str, object]) -> str:
+    detail_parts: list[str] = []
+    for key in ("descriptionPlain", "additionalPlain"):
+        value = posting.get(key)
+        if isinstance(value, str):
+            cleaned = helpers.normalize_whitespace(value)
+            if cleaned:
+                detail_parts.append(cleaned)
+    return " ".join(detail_parts)
+
+
 def _posting_notes(posting: dict[str, object]) -> str:
-    detail_parts: list[str] = []
-    for key in ("descriptionPlain", "additionalPlain"):
-        value = posting.get(key)
-        if isinstance(value, str):
-            cleaned = helpers.normalize_whitespace(value)
-            if cleaned:
-                detail_parts.append(cleaned)
-    if not detail_parts:
+    detail_text = _posting_detail_text(posting)
+    if not detail_text:
         return ""
-    return "Description: " + helpers.truncate_text(" ".join(detail_parts), 480)
-
-
-def _posting_description(posting: dict[str, object]) -> str:
-    detail_parts: list[str] = []
-    for key in ("descriptionPlain", "additionalPlain"):
-        value = posting.get(key)
-        if isinstance(value, str):
-            cleaned = helpers.normalize_whitespace(value)
-            if cleaned:
-                detail_parts.append(cleaned)
-    if not detail_parts:
-        return ""
-    return helpers.truncate_text(" ".join(detail_parts), JD_DESCRIPTION_CHAR_BUDGET)
+    return "Description: " + helpers.truncate_text(detail_text, 480)
 
 
 def discover_lever_json(source: SourceConfig, terms: list[str], timeout_seconds: int) -> Coverage:
@@ -87,19 +79,17 @@ def discover_lever_json(source: SourceConfig, terms: list[str], timeout_seconds:
         if not helpers.should_keep_candidate(title, matched, payload):
             continue
         raw_url = posting.get("hostedUrl") or posting.get("applyUrl") or source.url
-        helpers.merge_candidate(
-            candidates_by_url,
-            Candidate(
-                employer=source.source,
-                title=title,
-                url=helpers.normalize_url_without_fragment(raw_url),
-                source_url=source.url,
-                location=location,
-                matched_terms=matched,
-                notes=_posting_notes(posting),
-                description=_posting_description(posting),
-            ),
+        candidate = Candidate(
+            employer=source.source,
+            title=title,
+            url=helpers.normalize_url_without_fragment(raw_url),
+            source_url=source.url,
+            location=location,
+            matched_terms=matched,
+            notes=_posting_notes(posting),
         )
+        helpers.set_candidate_description(candidate, _posting_detail_text(posting))
+        helpers.merge_candidate(candidates_by_url, candidate)
 
     return Coverage(
         source=source.source,

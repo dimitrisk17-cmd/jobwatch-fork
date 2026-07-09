@@ -57,3 +57,4 @@ def test_discover_lever_json_filters_and_deduplicates(monkeypatch):
         "Build security and applied cryptography systems. "
         "Build protocol security systems."
     )
+    assert candidate.description_truncated is False

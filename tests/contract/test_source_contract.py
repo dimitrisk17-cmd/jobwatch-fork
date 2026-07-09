@@ -33,29 +33,40 @@ def _source_for_mode(mode: str) -> core.SourceConfig:
     urls = {
         "ashby_api": "https://jobs.ashbyhq.com/example",
         "ashby_html": "https://jobs.ashbyhq.com/example",
+        "alphatheta_html": "https://alphatheta.com/careers/",
+        "apple_jobs": "https://jobs.apple.com/en-us/search?search=cryptography",
         "asml_browser": "https://www.asml.com/en/careers/find-your-job",
         "automattic_browser": "https://automattic.com/work-with-us/",
         "auswaertiges_amt_json": "https://www.auswaertiges-amt.de/de/karriere/stellenanzeigen",
+        "bamboohr_api": "https://example.bamboohr.com/careers",
         "bnd_career_search": "https://www.bnd.bund.de/SiteGlobals/Forms/Suche/erweiterte_Karrieresuche_Formular.html?nn=415896#sprg415980",
         "bosch_autocomplete": "https://www.bosch.de/karriere/jobs",
         "browser": "https://www.google.com/about/careers/applications/jobs/results",
         "bundeswehr_jobsuche": "https://bewerbung.bundeswehr-karriere.de/erece/portal/index.html#joblist/none/TwoColumnsMidExpanded",
         "coinbase_browser": "https://www.coinbase.com/careers",
         "cybernetica_teamdash": "https://cyber.ee/careers/",
+        "demant_rss": "https://www.demant.com/careers",
+        "dover_api": "https://app.dover.com/example/careers/123e4567-e89b-12d3-a456-426614174000",
+        "ecb_avature_rss": "https://talent.ecb.europa.eu/careers/SearchJobs?jobRecordsPerPage=50",
         "eightfold_api": "https://apply.careers.microsoft.com/careers",
         "enbw_phenom": "https://careers.enbw.com/en_US/careers",
         "getro_api": "https://jobs.example-getro.com/jobs",
         "greenhouse_api": "https://job-boards.greenhouse.io/example",
         "hackernews_jobs": "https://news.ycombinator.com/jobs",
         "hackernews_whoishiring_api": "https://news.ycombinator.com/user?id=whoishiring",
+        "harman_html": "https://jobsearch.harman.com/en_US/careers/SearchJobs",
         "helsing_browser": "https://helsing.ai/jobs",
         "html": "https://jobs.example.com/",
         "iacr_jobs": "https://www.iacr.org/jobs/",
         "ibm_api": "https://www.ibm.com/careers/search",
         "icims_html": "https://example.icims.com/jobs",
         "infineon_api": "https://jobs.infineon.com/careers",
+        "jobvite_html": "https://jobs.jobvite.com/example/jobs",
+        "knds_jobboard": "https://jobs.knds.de/content/search/?locale=de_DE",
+        "krisp_html": "https://krisp.ai/careers/",
         "leastauthority_careers": "https://leastauthority.com/careers/",
         "lever_json": "https://jobs.lever.co/example",
+        "lifeatspotify_api": "https://www.lifeatspotify.com/jobs",
         "neclab_jobs": "https://jobs.neclab.eu/",
         "partisia_site": "https://partisiablockchain.com/",
         "pcd_team": "https://pcd.team/jd",
@@ -64,6 +75,7 @@ def _source_for_mode(mode: str) -> core.SourceConfig:
         "qusecure_careers": "https://www.qusecure.com/careers/",
         "recruitee_inline": "https://career.quantum-systems.com/",
         "rheinmetall_html": "https://www.rheinmetall.com/de/karriere/aktuelle-stellenangebote",
+        "sennheiser_rss": "https://jobs.sennheiser.com/",
         "service_bund_links": "https://www.bsi.bund.de/DE/Karriere/Stellenangebote/stellenangebot_node.html",
         "service_bund_search": (
             "https://www.service.bund.de/Content/DE/Stellen/Suche/Formular.html"
@@ -71,11 +83,13 @@ def _source_for_mode(mode: str) -> core.SourceConfig:
         ),
         "secunet_jobboard": "https://www.secunet.com/karriere/stellenangebote",
         "softgarden_html": "https://example.softgarden.io/de/vacancies",
+        "teamtailor_api": "https://www.rolandcareers.com/",
         "thales_browser": "https://careers.thalesgroup.com/global/en/search-results",
         "thales_html": "https://careers.thalesgroup.com/global/en/search-results",
         "trailofbits_browser": "https://trailofbits.com/careers/",
         "workable_api": "https://apply.workable.com/example/",
         "workday_api": "https://example.wd1.myworkdayjobs.com/Example",
+        "ultipro_api": "https://recruiting2.ultipro.com/EXA1000EX/JobBoard/123e4567-e89b-12d3-a456-426614174000/",
         "verfassungsschutz_rss": "https://www.verfassungsschutz.de/jobs",
         "yc_jobs_board": "https://www.ycombinator.com/jobs/role/software-engineer",
     }
@@ -204,6 +218,49 @@ def test_provider_candidates_have_required_fields(
         parsed = urlparse(candidate.url)
         assert parsed.scheme in {"http", "https"}
         assert parsed.netloc
+
+
+def test_thales_html_enriches_kept_candidates_from_detail_pages(monkeypatch: pytest.MonkeyPatch):
+    listing_html = """
+    <html><body>
+      <a href="/global/en/job/123/security-engineer">Security Engineer</a>
+      <script>window.__DATA__ = {"eagerLoadRefineSearch":{"hits":1,"totalHits":1,"data":{"jobs":[{"reqId":"123","jobSeqNo":"THALES123","title":"Security Engineer","cityStateCountry":"Munich, Germany","descriptionTeaser":"Build cryptography systems.","category":"Security"}]}}};</script>
+    </body></html>
+    """
+    detail_html = """
+    <html><body>
+      <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "JobPosting",
+          "description": "&lt;h2&gt;Responsibilities&lt;/h2&gt;&lt;p&gt;Design cryptography services for secure identity products.&lt;/p&gt;&lt;h2&gt;Qualifications&lt;/h2&gt;&lt;p&gt;Experience with applied security engineering and production cryptography.&lt;/p&gt;&lt;h2&gt;Benefits&lt;/h2&gt;&lt;p&gt;Competitive salary and flexible benefits.&lt;/p&gt;&lt;h2&gt;About Thales&lt;/h2&gt;&lt;p&gt;This company overview should not be copied into notes.&lt;/p&gt;"
+        }
+      </script>
+    </body></html>
+    """
+    fetched_urls: list[str] = []
+
+    def fake_fetch_text(url: str, timeout_seconds: int) -> str:
+        assert timeout_seconds == 5
+        fetched_urls.append(url)
+        if "/global/en/job/123/" in url:
+            return detail_html
+        return listing_html
+
+    monkeypatch.setattr(http, "fetch_text", fake_fetch_text)
+
+    coverage = core.discover_source(_source_for_mode("thales_html"), ["cryptography"], 5)
+
+    assert coverage.status == "complete"
+    assert coverage.direct_job_pages_opened == 1
+    assert len(fetched_urls) == 2
+    candidate = coverage.candidates[0]
+    assert candidate.title == "Security Engineer"
+    assert "Tasks: Design cryptography services for secure identity products." in candidate.notes
+    assert "Qualifications: Experience with applied security engineering and production cryptography." in candidate.notes
+    assert "Compensation: Competitive salary and flexible benefits." in candidate.notes
+    assert "<p>" not in candidate.notes
+    assert "company overview" not in candidate.notes
 
 
 @pytest.mark.parametrize(("mode", "adapter"), _provider_modes())

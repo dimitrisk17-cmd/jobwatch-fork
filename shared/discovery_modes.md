@@ -8,6 +8,26 @@ New source support should usually add or extend one of these provider modules ra
 
 ## Modes
 
+### `alphatheta_html`
+
+- Provider: `discover.sources.alphatheta` / `discover_alphatheta_jobs`
+- Emits candidates: yes
+- URL/source shape: `https://alphatheta.com/...` careers page.
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/alphatheta_html/`
+- Requirements: none
+- Known limitations: Recognizes the no-open-positions marker as a complete empty result; otherwise falls back to generic static-HTML link enumeration.
+
+### `apple_jobs`
+
+- Provider: `discover.sources.apple` / `discover_apple_jobs`
+- Emits candidates: yes
+- URL/source shape: `https://jobs.apple.com/<locale>/search?...`
+- Supported filters/options: encode Apple keyword/team/location filters in the source URL
+- Contract fixtures: `tests/fixtures/sources/apple_jobs/`
+- Requirements: none
+- Known limitations: Parses direct Apple job-detail links and visible search-result summaries from the static search page.
+
 ### `ashby_api`
 
 - Provider: `discover.sources.ashby` / `discover_ashby_api`
@@ -16,7 +36,7 @@ New source support should usually add or extend one of these provider modules ra
 - Supported filters/options: none
 - Contract fixtures: `tests/fixtures/sources/ashby_api/`
 - Requirements: none
-- Known limitations: Uses Ashby public GraphQL job-board data exposed by the hosted jobs page.
+- Known limitations: Uses Ashby public GraphQL job-board data; matched candidates are enriched with task/qualification/compensation sections from the per-posting GraphQL detail query.
 
 ### `ashby_html`
 
@@ -57,6 +77,16 @@ New source support should usually add or extend one of these provider modules ra
 - Contract fixtures: none
 - Requirements: `playwright.sync_api`
 - Known limitations: Requires Playwright and extracts visible job-card links only.
+
+### `bamboohr_api`
+
+- Provider: `discover.sources.bamboohr` / `discover_bamboohr_jobs`
+- Emits candidates: yes
+- URL/source shape: `https://<tenant>.bamboohr.com/careers`
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/bamboohr_api/`
+- Requirements: none
+- Known limitations: Uses the tenant careers/list and careers/<id>/detail JSON endpoints; fetches every posting detail before term filtering.
 
 ### `bnd_career_search`
 
@@ -118,6 +148,36 @@ New source support should usually add or extend one of these provider modules ra
 - Requirements: none
 - Known limitations: Only direct Teamdash job links visible in the careers-page HTML are enumerated.
 
+### `demant_rss`
+
+- Provider: `discover.sources.successfactors` / `discover_demant_successfactors`
+- Emits candidates: yes
+- URL/source shape: Demant careers page; enumeration uses `careers.demant.com/services/rss/job/` keyword search.
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/demant_rss/`
+- Requirements: none
+- Known limitations: One RSS search per track term; postings not matching any searched keyword are not enumerated.
+
+### `dover_api`
+
+- Provider: `discover.sources.dover` / `discover_dover_jobs`
+- Emits candidates: yes
+- URL/source shape: `https://app.dover.com/<company>/careers/<careers-page-uuid>`
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/dover_api/`
+- Requirements: none
+- Known limitations: Uses the Dover careers-page JSON API; unpublished and sample postings are skipped.
+
+### `ecb_avature_rss`
+
+- Provider: `discover.sources.ecb` / `discover_ecb_avature_rss`
+- Emits candidates: yes
+- URL/source shape: ECB Avature careers page or its `SearchJobs/feed/` RSS URL.
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/ecb_avature_rss/`
+- Requirements: none
+- Known limitations: Uses the official Avature RSS feed and opens matched job-detail pages for role sections.
+
 ### `eightfold_api`
 
 - Provider: `discover.sources.eightfold` / `discover_eightfold_api`
@@ -177,6 +237,16 @@ New source support should usually add or extend one of these provider modules ra
 - Contract fixtures: `tests/fixtures/sources/hackernews_whoishiring_api/`
 - Requirements: none
 - Known limitations: Parses the active Who Is Hiring thread and infers employer/title fields from post text.
+
+### `harman_html`
+
+- Provider: `discover.sources.harman` / `discover_harman_jobsearch_jobs`
+- Emits candidates: yes
+- URL/source shape: `https://jobsearch.harman.com/<locale>/careers/...` listing page.
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/harman_html/`
+- Requirements: none
+- Known limitations: Only direct Avature JobDetail links visible in the listing HTML are enumerated.
 
 ### `helsing_browser`
 
@@ -238,6 +308,36 @@ New source support should usually add or extend one of these provider modules ra
 - Requirements: none
 - Known limitations: Infineon-specific Eightfold provider wrapper.
 
+### `jobvite_html`
+
+- Provider: `discover.sources.jobvite` / `discover_jobvite_jobs`
+- Emits candidates: yes
+- URL/source shape: `https://jobs.jobvite.com/<company>/...` listing page.
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/jobvite_html/`
+- Requirements: none
+- Known limitations: Parses jv-job-list rows from the listing HTML and enriches matched candidates from job-detail pages.
+
+### `knds_jobboard`
+
+- Provider: `discover.sources.generic_html` / `discover_knds_jobboard`
+- Emits candidates: yes
+- URL/source shape: `https://jobs.knds.de/content/search/?locale=de_DE`
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/knds_jobboard/`
+- Requirements: none
+- Known limitations: Uses visible KNDS job-detail links when static links are present, then falls back to the public Recruiting Solutions search API.
+
+### `krisp_html`
+
+- Provider: `discover.sources.krisp` / `discover_krisp_jobs`
+- Emits candidates: yes
+- URL/source shape: `https://krisp.ai/careers/`
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/krisp_html/`
+- Requirements: none
+- Known limitations: Enumerates direct /jobs/<slug> links and enriches from each job-detail page.
+
 ### `leastauthority_careers`
 
 - Provider: `discover.sources.static_pages` / `discover_leastauthority_careers`
@@ -257,6 +357,16 @@ New source support should usually add or extend one of these provider modules ra
 - Contract fixtures: `tests/fixtures/sources/lever_json/`
 - Requirements: none
 - Known limitations: Uses Lever public postings JSON.
+
+### `lifeatspotify_api`
+
+- Provider: `discover.sources.lifeatspotify` / `discover_lifeatspotify_jobs`
+- Emits candidates: yes
+- URL/source shape: `https://www.lifeatspotify.com/jobs`
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/lifeatspotify_api/`
+- Requirements: none
+- Known limitations: Uses the public api.lifeatspotify.com job search and detail endpoints; details fetched for matched candidates only.
 
 ### `neclab_jobs`
 
@@ -296,7 +406,7 @@ New source support should usually add or extend one of these provider modules ra
 - Supported filters/options: none
 - Contract fixtures: `tests/fixtures/sources/personio_page/`
 - Requirements: none
-- Known limitations: Extracts Personio jobs from embedded page payloads.
+- Known limitations: Extracts Personio jobs from embedded page payloads, falling back to the tenant /xml feed when the page payload is missing.
 
 ### `qedit_inline`
 
@@ -348,6 +458,16 @@ New source support should usually add or extend one of these provider modules ra
 - Requirements: none
 - Known limitations: Only links matching the secunet job-detail URL pattern are enumerated.
 
+### `sennheiser_rss`
+
+- Provider: `discover.sources.successfactors` / `discover_sennheiser_jobs`
+- Emits candidates: yes
+- URL/source shape: `https://jobs.sennheiser.com/`
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/sennheiser_rss/`
+- Requirements: none
+- Known limitations: Reads the full jobs.sennheiser.com RSS feed in a single fetch.
+
 ### `service_bund_links`
 
 - Provider: `discover.sources.service_bund` / `discover_service_bund_links`
@@ -378,6 +498,16 @@ New source support should usually add or extend one of these provider modules ra
 - Requirements: none
 - Known limitations: Parses static Softgarden vacancy cards and opens matched detail pages for role-section snippets.
 
+### `teamtailor_api`
+
+- Provider: `discover.sources.teamtailor` / `discover_teamtailor_jobs`
+- Emits candidates: yes
+- URL/source shape: Teamtailor-hosted careers site exposing `/jobs.json` at the site root.
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/teamtailor_api/`
+- Requirements: none
+- Known limitations: Reads the standard Teamtailor jobs.json feed; locations come from embedded jobposting address data.
+
 ### `thales_browser`
 
 - Provider: `discover.sources.browser` / `discover_thales_browser`
@@ -407,6 +537,16 @@ New source support should usually add or extend one of these provider modules ra
 - Contract fixtures: none
 - Requirements: `playwright.sync_api`
 - Known limitations: Requires Playwright and extracts visible Workable application links.
+
+### `ultipro_api`
+
+- Provider: `discover.sources.ultipro` / `discover_ultipro_jobs`
+- Emits candidates: yes
+- URL/source shape: `https://recruiting2.ultipro.com/<tenant>/JobBoard/<board-guid>/...`
+- Supported filters/options: none
+- Contract fixtures: `tests/fixtures/sources/ultipro_api/`
+- Requirements: none
+- Known limitations: Pages the LoadSearchResults JSON endpoint (up to 10 pages of 100).
 
 ### `verfassungsschutz_rss`
 

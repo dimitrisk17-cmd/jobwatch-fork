@@ -52,6 +52,7 @@ fi
   tests/unit/test_send_digest_email.py \
   tests/unit/test_send_digest_telegram.py \
   tests/unit/test_source_config.py \
+  tests/unit/test_enrich_candidate_descriptions.py \
   tests/unit/test_agent_support.py \
   tests/unit/test_machine_resolution.py \
   tests/unit/test_integrate_next_source.py \
@@ -64,9 +65,10 @@ fi
   tests/integration/test_eval_source_quality.py \
   tests/integration/test_source_integration.py \
   tests/integration/test_sync_to_logseq.py \
+  tests/integration/test_discover_apple_jobs.py \
   tests/integration/test_discover_asml_browser.py \
-  tests/integration/test_discover_followup_sources.py \
   tests/integration/test_discover_greenhouse_api.py \
+  tests/integration/test_discover_followup_sources.py \
   tests/integration/test_discover_iacr_jobs.py \
   tests/integration/test_discover_lever_json.py \
   tests/integration/test_discover_meta_browser.py \
