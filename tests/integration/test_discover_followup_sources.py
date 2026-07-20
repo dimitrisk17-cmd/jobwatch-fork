@@ -77,6 +77,36 @@ def test_discover_greenhouse_api_filters_and_builds_urls(monkeypatch):
     assert "complete benefits catalogue" not in candidate.notes
 
 
+def test_discover_greenhouse_api_builds_consensys_board_job_url(monkeypatch):
+    source = discover_jobs.SourceConfig(
+        source="Consensys",
+        url="https://job-boards.greenhouse.io/consensys",
+        discovery_mode="greenhouse_api",
+        last_checked=None,
+        cadence_group="every_3_runs",
+    )
+
+    def fake_fetch_json(url: str, timeout_seconds: int):
+        assert url == "https://boards-api.greenhouse.io/v1/boards/consensys/jobs?content=true"
+        return {
+            "jobs": [
+                {
+                    "id": 7821125,
+                    "title": "Application Security Engineer",
+                    "absolute_url": "https://consensys.io/open-roles/7821125?gh_jid=7821125",
+                    "location": {"name": "Remote"},
+                    "content": "Build application security and wallet security systems.",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(discover_http, "fetch_json", fake_fetch_json)
+
+    coverage = discover_jobs.discover_greenhouse_api(source, ["application security"], timeout_seconds=5)
+
+    assert coverage.candidates[0].url == "https://job-boards.greenhouse.io/consensys/jobs/7821125"
+
+
 def test_discover_workday_api_posts_search_terms_and_builds_detail_urls(monkeypatch):
     source = discover_jobs.SourceConfig(
         source="Example Workday",
@@ -659,6 +689,62 @@ def test_discover_personio_page_parses_embedded_jobs_payload(monkeypatch):
     assert candidate.url == "https://albert.example/jobs/software-engineer"
     assert candidate.location == "Berlin, Germany"
     assert candidate.matched_terms == ["software engineer"]
+
+
+def test_discover_personio_page_enriches_embedded_jobs_from_xml_feed(monkeypatch):
+    source = discover_jobs.SourceConfig(
+        source="STARK",
+        url="https://stark.jobs.personio.com/",
+        discovery_mode="personio_page",
+        last_checked=None,
+        cadence_group="every_run",
+    )
+    decoded_chunk = (
+        '[["$","$L13"],{"jobs":[{"title":"Flight Test Engineer / UAV Pilot (All Genders)"}],'
+        '"subdomain":"stark"}]'
+    )
+    html = f"<html><body><script>self.__next_f.push([1,{json.dumps(decoded_chunk)}])</script></body></html>"
+    xml_feed = """<?xml version="1.0" encoding="UTF-8"?>
+<workzag-jobs>
+  <position>
+    <id>4242</id>
+    <name>Flight Test Engineer / UAV Pilot (All Genders)</name>
+    <office>Munich</office>
+    <department>Engineering</department>
+    <employmentType>permanent</employmentType>
+    <jobDescriptions>
+      <jobDescription>
+        <name>Your mission</name>
+        <value><![CDATA[<p>Plan and execute flight tests for autonomous UAV systems.</p>]]></value>
+      </jobDescription>
+      <jobDescription>
+        <name>Your profile</name>
+        <value><![CDATA[<p>Professional UAV flight-test and systems engineering experience.</p>]]></value>
+      </jobDescription>
+    </jobDescriptions>
+  </position>
+</workzag-jobs>
+"""
+
+    def fake_fetch_text(url: str, timeout_seconds: int) -> str:
+        if url == source.url:
+            return html
+        if url == "https://stark.jobs.personio.com/xml":
+            return xml_feed
+        raise AssertionError(f"unexpected fetch_text({url})")
+
+    monkeypatch.setattr(discover_http, "fetch_text", fake_fetch_text)
+
+    coverage = discover_jobs.discover_personio_page(source, ["UAV"], timeout_seconds=5)
+
+    assert coverage.status == "complete"
+    assert coverage.enumerated_jobs == 1
+    assert coverage.matched_jobs == 1
+    candidate = coverage.candidates[0]
+    assert candidate.url == "https://stark.jobs.personio.com/job/4242"
+    assert candidate.location == "Munich"
+    assert "Tasks: Plan and execute flight tests for autonomous UAV systems." in candidate.notes
+    assert "Qualifications: Professional UAV flight-test and systems engineering experience." in candidate.notes
 
 
 def test_discover_ibm_api_filters_ibm_research_generic_noise_and_keeps_canary_detail(monkeypatch):

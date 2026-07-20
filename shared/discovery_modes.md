@@ -204,7 +204,7 @@ New source support should usually add or extend one of these provider modules ra
 - Emits candidates: yes
 - URL/source shape: `https://<tenant>.factorialhr.com/` company career page.
 - Supported filters/options: none
-- Contract fixtures: none
+- Contract fixtures: `tests/fixtures/sources/factorial/`
 - Requirements: none
 - Known limitations: Enumerates listing links like generic HTML, then opens each `/job_posting/` detail page to recover the real title, location, and role detail, since the listing only exposes anonymous apply links.
 
@@ -274,7 +274,7 @@ New source support should usually add or extend one of these provider modules ra
 - Emits candidates: yes
 - URL/source shape: `https://<company>.careers.hibob.com` hosted careers page.
 - Supported filters/options: none
-- Contract fixtures: none
+- Contract fixtures: `tests/fixtures/sources/hibob_api/`
 - Requirements: none
 - Known limitations: Reads every published posting from the HiBob `/api/job-ad` JSON endpoint (requires the `companyIdentifier` header derived from the careers subdomain); descriptions come from the same response, so no per-posting fetch is needed.
 

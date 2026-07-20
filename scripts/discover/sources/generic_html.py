@@ -29,6 +29,25 @@ def is_same_page_link(source_url: str, candidate_url: str) -> bool:
     return helpers.normalize_url_without_fragment(source_url) == helpers.normalize_url_without_fragment(candidate_url)
 
 
+def is_lattica_news_source(source_url: str) -> bool:
+    parsed = urlparse(source_url)
+    return parsed.netloc.lower() in {"lattica.ai", "www.lattica.ai"} and parsed.path.rstrip("/") == "/news"
+
+
+def is_duality_careers_source(source_url: str) -> bool:
+    parsed = urlparse(source_url)
+    return parsed.netloc.lower() in {"dualitytech.com", "www.dualitytech.com"} and parsed.path.rstrip(
+        "/"
+    ) == "/careers"
+
+
+def is_duality_job_detail_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return parsed.netloc.lower() in {"dualitytech.com", "www.dualitytech.com"} and parsed.path.rstrip(
+        "/"
+    ).startswith("/careers/")
+
+
 def looks_like_non_job_link(text: str, href: str) -> bool:
     text_lower = helpers.normalize_whitespace(text).lower()
     href_lower = href.lower()
@@ -78,12 +97,118 @@ def collect_job_links(html: str, base_url: str, path_fragment: str) -> dict[str,
     return links
 
 
+def is_bwi_job_detail_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return parsed.netloc.lower() in {"bwi.de", "www.bwi.de"} and parsed.path.startswith(
+        "/karriere/stellenangebote/job/"
+    )
+
+
+def extract_bwi_job_detail(html: str) -> str:
+    text = helpers.strip_html_fragment(html)
+    marker = re.search(r"\bStellen-ID:\s*\d+\b", text, flags=re.IGNORECASE)
+    if not marker:
+        return ""
+    return helpers.normalize_whitespace(text[marker.start() :])
+
+
+def extract_bwi_title(detail: str, fallback: str) -> str:
+    match = re.match(
+        r"Stellen-ID:\s*\d+\s+(.+?)\s+(?:ab sofort\b|Stellenbeschreibung\b)",
+        detail,
+        flags=re.IGNORECASE,
+    )
+    return helpers.normalize_whitespace(match.group(1) if match else fallback) or "unknown"
+
+
+def extract_bwi_location(detail: str, title: str) -> str:
+    heading = detail.split("Stellenbeschreibung", 1)[0]
+    nationwide = re.search(
+        r"\b(bundesweit\s+an\s+einem\s+unserer\s+BWI\s+Standorte)\b",
+        heading,
+        flags=re.IGNORECASE,
+    )
+    if nationwide:
+        return helpers.normalize_whitespace(nationwide.group(1))
+    location_marker = heading.lower().rfind(" in ")
+    if location_marker >= 0:
+        return helpers.normalize_whitespace(heading[location_marker + 4 :].rstrip(". "))
+    title_location = re.search(r"\(m/w/d\)\s+in\s+(.+)$", title, flags=re.IGNORECASE)
+    return helpers.normalize_whitespace(title_location.group(1)) if title_location else "unknown"
+
+
+def discover_bwi_jobboard(source: SourceConfig, terms: list[str], timeout_seconds: int) -> Coverage:
+    listing_html = http.fetch_text(source.url, timeout_seconds)
+    parser = helpers.LinkCollector()
+    parser.feed(listing_html)
+    links: dict[str, str] = {}
+    for link in parser.links:
+        absolute_url = helpers.normalize_url_without_fragment(urljoin(source.url, link["href"]))
+        if is_bwi_job_detail_url(absolute_url):
+            links.setdefault(absolute_url, helpers.normalize_whitespace(link["text"]))
+
+    candidates: list[Candidate] = []
+    limitations: list[str] = []
+    opened_pages = 0
+    for url, link_text in links.items():
+        try:
+            detail_html = http.fetch_text(url, timeout_seconds)
+        except Exception as exc:
+            limitations.append(f"BWI job detail fetch failed for {url}: {exc}")
+            continue
+        opened_pages += 1
+        detail = extract_bwi_job_detail(detail_html)
+        if not detail:
+            limitations.append(f"BWI job detail marker was missing for {url}")
+            continue
+        title = extract_bwi_title(detail, link_text)
+        searchable_text = f"{title} {detail}"
+        matched_terms = sorted(set(helpers.match_terms(searchable_text, terms)))
+        if not matched_terms or not helpers.should_keep_candidate(title, matched_terms, searchable_text):
+            continue
+        candidate = Candidate(
+            employer=source.source,
+            title=title,
+            url=url,
+            source_url=source.url,
+            location=extract_bwi_location(detail, title),
+            matched_terms=matched_terms,
+            notes=f"BWI vacancy detail: {detail}",
+        )
+        helpers.set_candidate_description(candidate, detail)
+        candidates.append(candidate)
+
+    return Coverage(
+        source=source.source,
+        source_url=source.url,
+        discovery_mode=source.discovery_mode,
+        cadence_group=source.cadence_group,
+        last_checked=source.last_checked,
+        due_today=False,
+        status="complete",
+        listing_pages_scanned=1,
+        search_terms_tried=terms,
+        result_pages_scanned=f"bwi_job_details={opened_pages}",
+        direct_job_pages_opened=opened_pages,
+        enumerated_jobs=len(links),
+        matched_jobs=len(candidates),
+        limitations=limitations,
+        candidates=candidates,
+    )
+
+
 def discover_html(source: SourceConfig, terms: list[str], timeout_seconds: int) -> Coverage:
-    html = http.fetch_text(source.url, timeout_seconds)
+    if urlparse(source.url).netloc.lower() in {"bwi.de", "www.bwi.de"}:
+        return discover_bwi_jobboard(source, terms, timeout_seconds)
+    duality_careers = is_duality_careers_source(source.url)
+    fetch_listing = http.fetch_text_ipv4 if duality_careers else http.fetch_text
+    html = fetch_listing(source.url, timeout_seconds)
     parser = helpers.LinkCollector()
     parser.feed(html)
     candidates: list[Candidate] = []
     seen_urls: set[str] = set()
+    enumerated_urls: set[str] = set()
+    require_term_match = is_lattica_news_source(source.url) or duality_careers
     for link in parser.links:
         href = link["href"]
         text = helpers.normalize_whitespace(link["text"])
@@ -94,12 +219,16 @@ def discover_html(source: SourceConfig, terms: list[str], timeout_seconds: int) 
             continue
         if urlparse(absolute_url).scheme not in {"file", "http", "https"}:
             continue
+        if duality_careers and not is_duality_job_detail_url(absolute_url):
+            continue
+        if duality_careers:
+            enumerated_urls.add(absolute_url)
         if looks_like_non_job_link(text, absolute_url):
             continue
         if is_same_page_link(source.url, absolute_url):
             continue
         matched_terms = helpers.match_terms(f"{text} {absolute_url}", terms)
-        if not matched_terms and not helpers.looks_like_job_link(text, absolute_url):
+        if not matched_terms and (require_term_match or not helpers.looks_like_job_link(text, absolute_url)):
             continue
         if matched_terms and not helpers.should_keep_candidate(text or "unknown", matched_terms, f"{text} {absolute_url}"):
             continue
@@ -126,7 +255,7 @@ def discover_html(source: SourceConfig, terms: list[str], timeout_seconds: int) 
         search_terms_tried=terms,
         result_pages_scanned="local_filter=1",
         direct_job_pages_opened=0,
-        enumerated_jobs=len(parser.links),
+        enumerated_jobs=len(enumerated_urls) if duality_careers else len(parser.links),
         matched_jobs=len(candidates),
         limitations=[],
         candidates=candidates,
@@ -615,6 +744,10 @@ def discover_factorial(source: SourceConfig, terms: list[str], timeout_seconds: 
             continue
         pages_opened += 1
         enrich_factorial_candidate(candidate, html)
+        searchable_text = " ".join(
+            part for part in [candidate.title, candidate.location, candidate.description] if part
+        )
+        candidate.matched_terms = sorted(set(helpers.match_terms(searchable_text, terms)))
     coverage.direct_job_pages_opened = pages_opened
     coverage.result_pages_scanned = f"local_filter=1; factorial_detail_pages={pages_opened}"
     if failures:
