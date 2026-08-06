@@ -7,15 +7,13 @@ should be added there and registered through the provider registry.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from discover.constants import (
     DEFAULT_BROWSER_TIMEOUT_MS,
     DEFAULT_TIMEOUT_SECONDS,
     MAX_BROWSER_PAGES,
-    NON_TECHNICAL_TITLE_HINTS,
-    SPECIALIZED_SIGNAL_TERMS,
-    TECHNICAL_TITLE_HINTS,
 )
 from discover.core import (
     BrowserEnrichmentResult,
@@ -41,7 +39,6 @@ from discover.helpers import (
     extract_visible_text_section,
     infer_remote_status,
     join_text,
-    looks_like_job_link,
     match_terms,
     match_terms_with_aliases,
     merge_candidate,
@@ -49,7 +46,6 @@ from discover.helpers import (
     normalize_heading_line,
     normalize_url_without_fragment,
     normalize_whitespace,
-    should_keep_candidate,
     slugify_title,
     split_visible_lines,
     strip_html_fragment,
@@ -289,7 +285,7 @@ from sap_odata import (
 from source_config import SourceConfigError
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("JOB_AGENT_ROOT", Path(__file__).resolve().parents[1]))
 DISCOVERY_HANDLERS = {mode: adapter.discover for mode, adapter in load_registry().items()}
 
 
