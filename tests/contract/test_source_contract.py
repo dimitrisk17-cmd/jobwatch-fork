@@ -78,6 +78,7 @@ def _source_for_mode(mode: str) -> core.SourceConfig:
         "recruitee_inline": "https://career.quantum-systems.com/",
         "rheinmetall_html": "https://www.rheinmetall.com/de/karriere/aktuelle-stellenangebote",
         "sennheiser_rss": "https://jobs.sennheiser.com/",
+        "successfactors_rss": "https://careers.example.com/search/?locale=en_US",
         "service_bund_links": "https://www.bsi.bund.de/DE/Karriere/Stellenangebote/stellenangebot_node.html",
         "service_bund_search": (
             "https://www.service.bund.de/Content/DE/Stellen/Suche/Formular.html"
