@@ -130,6 +130,63 @@ def test_source_pack_rejects_budget_hash_employer_and_unknown_rule_ids() -> None
         setup_contracts.normalize_source_pack(foreign_rule, setup)
 
 
+def _assert_const_and_enum_schemas_are_typed(schema: dict, path: str = "$") -> None:
+    if "const" in schema or "enum" in schema:
+        assert "type" in schema, path
+    if schema.get("type") == "object":
+        assert schema.get("additionalProperties") is False, path
+    for key in ("properties", "$defs", "definitions"):
+        for name, nested in schema.get(key, {}).items():
+            _assert_const_and_enum_schemas_are_typed(nested, f"{path}.{key}.{name}")
+    if isinstance(schema.get("items"), dict):
+        _assert_const_and_enum_schemas_are_typed(schema["items"], f"{path}.items")
+    for key in ("anyOf", "oneOf", "allOf"):
+        for index, nested in enumerate(schema.get(key, [])):
+            _assert_const_and_enum_schemas_are_typed(nested, f"{path}.{key}[{index}]")
+
+
+def test_worker_json_schemas_type_const_and_enum_fields() -> None:
+    setup = setup_contracts.normalize_setup(setup_payload())
+    source_schema = setup_contracts.worker_json_schema("source_discovery", setup)
+    _assert_const_and_enum_schemas_are_typed(source_schema)
+
+    preview_context = {
+        "schema_version": 1,
+        "kind": "jobwatch_preview_context",
+        "setup_id": setup["setup_id"],
+        "input_hash": setup_contracts.artifact_hash(setup),
+        "date": "2026-07-20",
+        "track": setup["track"],
+        "profile": setup["profile"],
+        "source_notes": [],
+        "coverage_limitations": [],
+        "omitted_candidate_count": 0,
+        "inputs": {"setup": {"path": "setup.json"}, "discovery": {"path": "discovery.json"}},
+        "candidates": [
+            {
+                "candidate_id": "candidate-1",
+                "employer": "Example Labs",
+                "title": "Cryptography Engineer",
+                "url": "https://jobs.example.test/jobs/1",
+                "alternate_url": "",
+                "location": "Remote Europe",
+                "remote": "remote",
+                "source": "Example Labs",
+                "source_url": "https://jobs.example.test/careers",
+                "matched_terms": ["cryptography"],
+                "description": "Role description",
+                "description_truncated": False,
+            }
+        ],
+    }
+    preview_schema = setup_contracts.worker_json_schema("preview_ranker", preview_context)
+    _assert_const_and_enum_schemas_are_typed(preview_schema)
+    scored_judgments = preview_schema["properties"]["judgments"]["items"]["anyOf"][:2]
+    assert all(item["properties"]["score"]["minimum"] == 1 for item in scored_judgments)
+    assert all(item["properties"]["score"]["maximum"] == 10 for item in scored_judgments)
+    assert "1-10 scale" in setup_contracts.build_worker_prompt("preview_ranker", preview_context)
+
+
 def _write_discovery(path: Path, *, track: str, candidates: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -304,6 +361,11 @@ def test_preview_result_requires_one_identity_preserving_judgment_per_candidate(
     assert normalize_digest_payload(digest) == digest
     assert digest["runs"][0]["top_matches"][0]["listing_url"] == context["candidates"][0]["url"]
     assert len(digest["runs"][0]["filtered_roles"]) == 1
+
+    normalized_score = copy.deepcopy(result)
+    normalized_score["judgments"][0]["score"] = 0.9
+    with pytest.raises(setup_contracts.SetupContractError, match="between 1 and 10"):
+        setup_contracts.normalize_preview_result(normalized_score, context)
 
     missing = copy.deepcopy(result)
     missing["judgments"].pop()

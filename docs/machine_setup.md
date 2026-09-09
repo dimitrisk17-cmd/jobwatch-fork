@@ -15,6 +15,7 @@ That will:
 - create machine-local config via `scripts/setup_machine.sh`
 - create local profile placeholders under `profile/`
 - bootstrap the repo-local virtualenv via `scripts/bootstrap_venv.sh`
+- install `pdftotext` (Poppler) when it is not already available, so guided setup can read a PDF CV
 - print a final next-step block with the guided setup command
 
 In an interactive terminal, bootstrap asks whether to launch the guided setup agent now; the default answer is yes. In non-interactive mode, it never launches the agent unless you pass `--start-setup-agent`. Use `--no-start-setup-agent` to suppress the prompt in interactive runs.
@@ -193,6 +194,7 @@ For common providers, start with the provider/account shorthand and then add rec
 export JOB_AGENT_EMAIL_PROVIDER=gmail
 export JOB_AGENT_EMAIL_ACCOUNT=jobs@example.com
 export JOB_AGENT_SMTP_TO=you@example.com
+export JOB_AGENT_SMTP_CC=other@example.com
 export JOB_AGENT_SMTP_PASSWORD_CMD='pass show email/jobwatch-smtp'
 ```
 

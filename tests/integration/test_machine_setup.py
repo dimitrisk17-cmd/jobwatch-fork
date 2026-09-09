@@ -250,6 +250,7 @@ def test_setup_machine_preserves_existing_smtp_values_but_removes_plaintext_pass
                 "export JOB_AGENT_SMTP_PORT=2525",
                 "export JOB_AGENT_SMTP_FROM=jobs@test.invalid",
                 "export JOB_AGENT_SMTP_TO=user@test.invalid",
+                "export JOB_AGENT_SMTP_CC=cc@test.invalid",
                 "export JOB_AGENT_SMTP_USERNAME=smtp-user",
                 "export JOB_AGENT_SMTP_PASSWORD_CMD='pass show email/jobwatch-smtp'",
                 "export JOB_AGENT_SMTP_PASSWORD=smtp-secret",
@@ -278,6 +279,7 @@ def test_setup_machine_preserves_existing_smtp_values_but_removes_plaintext_pass
     assert "export JOB_AGENT_SMTP_PORT=2525" in env_text
     assert "export JOB_AGENT_SMTP_FROM=jobs@test.invalid" in env_text
     assert "export JOB_AGENT_SMTP_TO=user@test.invalid" in env_text
+    assert "export JOB_AGENT_SMTP_CC=cc@test.invalid" in env_text
     assert "export JOB_AGENT_SMTP_USERNAME=smtp-user" in env_text
     assert f"export JOB_AGENT_SECRETS_FILE={bash_quote(secrets_file)}" in env_text
     assert "export JOB_AGENT_SMTP_PASSWORD_CMD=pass\\ show\\ email/jobwatch-smtp" in env_text
@@ -305,6 +307,7 @@ def test_setup_machine_delivery_flags_precedence(
                 "export JOB_AGENT_EMAIL_PROVIDER=fastmail",
                 "export JOB_AGENT_EMAIL_ACCOUNT=old@test.invalid",
                 "export JOB_AGENT_SMTP_TO=old-to@test.invalid",
+                "export JOB_AGENT_SMTP_CC=old-cc@test.invalid",
                 "export JOB_AGENT_TELEGRAM_CHAT_ID=111111",
                 "",
             ]
@@ -328,6 +331,7 @@ def test_setup_machine_delivery_flags_precedence(
         "--email-provider", "gmail",
         "--email-account", "new@test.invalid",
         "--smtp-to", "new-to@test.invalid",
+        "--smtp-cc", "new-cc@test.invalid",
         "--telegram-chat-id", "222222",
         env=env,
         cwd=repo_root,
@@ -338,6 +342,7 @@ def test_setup_machine_delivery_flags_precedence(
     assert "export JOB_AGENT_EMAIL_PROVIDER=gmail" in env_text
     assert "export JOB_AGENT_EMAIL_ACCOUNT=new@test.invalid" in env_text
     assert "export JOB_AGENT_SMTP_TO=new-to@test.invalid" in env_text
+    assert "export JOB_AGENT_SMTP_CC=new-cc@test.invalid" in env_text
     assert "export JOB_AGENT_TELEGRAM_CHAT_ID=222222" in env_text
 
     # Without CLI args, existing should be preserved
@@ -354,6 +359,7 @@ def test_setup_machine_delivery_flags_precedence(
     assert "export JOB_AGENT_EMAIL_PROVIDER=gmail" in env_text
     assert "export JOB_AGENT_EMAIL_ACCOUNT=new@test.invalid" in env_text
     assert "export JOB_AGENT_SMTP_TO=new-to@test.invalid" in env_text
+    assert "export JOB_AGENT_SMTP_CC=new-cc@test.invalid" in env_text
     assert "export JOB_AGENT_TELEGRAM_CHAT_ID=222222" in env_text
 
 
@@ -955,6 +961,7 @@ printf 'setup_machine %s\\n' "$*" >> "${BOOTSTRAP_MACHINE_LOG:?missing BOOTSTRAP
         "BOOTSTRAP_MACHINE_LOG": str(log_file),
         "JOB_AGENT_ROOT": str(tmp_job_agent_root),
         "JOB_AGENT_PLATFORM": "Linux",
+        "JOB_AGENT_PDFTOTEXT_BIN": str(agent_bin),
     }
 
     result = run_cmd(
@@ -1036,6 +1043,7 @@ def test_bootstrap_machine_omits_linux_only_followup_on_non_linux(
     env = os.environ | {
         "JOB_AGENT_ROOT": str(tmp_job_agent_root),
         "JOB_AGENT_PLATFORM": "Darwin",
+        "JOB_AGENT_PDFTOTEXT_BIN": str(agent_bin),
     }
 
     result = run_cmd("bash", str(bootstrap_script), "--agent", "codex", "--agent-bin", str(agent_bin), env=env, cwd=tmp_job_agent_root)
@@ -1044,6 +1052,54 @@ def test_bootstrap_machine_omits_linux_only_followup_on_non_linux(
     assert "Next:" in result.stdout
     assert "bash scripts/start_setup_agent.sh --agent codex" in result.stdout
     assert "install_bwrap_apparmor" not in result.stdout
+
+
+def test_bootstrap_machine_installs_poppler_with_homebrew_when_pdftotext_is_missing(
+    tmp_job_agent_root: Path, repo_root: Path, run_cmd
+) -> None:
+    bootstrap_script = tmp_job_agent_root / "scripts" / "bootstrap_machine.sh"
+    setup_script = tmp_job_agent_root / "scripts" / "setup_machine.sh"
+    bootstrap_venv_script = tmp_job_agent_root / "scripts" / "bootstrap_venv.sh"
+    fake_bin_dir = tmp_job_agent_root / "bin"
+    log_file = tmp_job_agent_root / "brew.log"
+    agent_bin = fake_bin_dir / "codex"
+    pdftotext_bin = fake_bin_dir / "pdftotext"
+    _write_executable(agent_bin, "#!/bin/bash\nexit 0\n")
+    _write_executable(
+        fake_bin_dir / "brew",
+        """#!/bin/bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "${BREW_LOG:?missing BREW_LOG}"
+touch "$(dirname "$0")/pdftotext"
+chmod +x "$(dirname "$0")/pdftotext"
+""",
+    )
+    _write_executable(bootstrap_script, (repo_root / "scripts" / "bootstrap_machine.sh").read_text())
+    _write_executable(setup_script, "#!/bin/bash\nset -euo pipefail\n")
+    _write_executable(bootstrap_venv_script, "#!/bin/bash\nset -euo pipefail\n")
+
+    env = os.environ | {
+        "BREW_LOG": str(log_file),
+        "JOB_AGENT_ROOT": str(tmp_job_agent_root),
+        "JOB_AGENT_PLATFORM": "Darwin",
+        "JOB_AGENT_PDFTOTEXT_BIN": str(pdftotext_bin),
+        "PATH": f"{fake_bin_dir}:/usr/bin:/bin",
+    }
+
+    result = run_cmd(
+        "bash",
+        str(bootstrap_script),
+        "--agent",
+        "codex",
+        "--agent-bin",
+        str(agent_bin),
+        env=env,
+        cwd=tmp_job_agent_root,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert log_file.read_text() == "install poppler\n"
+    assert "pdftotext was not found; installing Poppler" in result.stdout
 
 
 def test_bootstrap_machine_starts_setup_agent_only_when_requested(
@@ -1084,6 +1140,7 @@ printf 'start_setup_agent %s\\n' "$*" >> "${BOOTSTRAP_MACHINE_LOG:?missing BOOTS
         "BOOTSTRAP_MACHINE_LOG": str(log_file),
         "JOB_AGENT_ROOT": str(tmp_job_agent_root),
         "JOB_AGENT_PLATFORM": "Linux",
+        "JOB_AGENT_PDFTOTEXT_BIN": str(agent_bin),
     }
 
     result = run_cmd(
@@ -1144,6 +1201,7 @@ printf 'start_setup_agent %s\\n' "$*" >> "${BOOTSTRAP_MACHINE_LOG:?missing BOOTS
         "BOOTSTRAP_MACHINE_LOG": str(log_file),
         "JOB_AGENT_ROOT": str(tmp_job_agent_root),
         "JOB_AGENT_PLATFORM": "Linux",
+        "JOB_AGENT_PDFTOTEXT_BIN": str(agent_bin),
     }
 
     result = _run_interactive(

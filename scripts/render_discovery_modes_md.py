@@ -257,6 +257,11 @@ MODE_DETAILS = {
         "filters": "none",
         "limitations": "Reads the full jobs.sennheiser.com RSS feed in a single fetch.",
     },
+    "successfactors_rss": {
+        "url_shape": "SAP SuccessFactors / Jobs2Web careers URL; the RSS endpoint is derived from its origin.",
+        "filters": "encode a non-default `locale` in the source URL query",
+        "limitations": "Runs one official RSS keyword search per configured term; each feed may be capped by SuccessFactors.",
+    },
     "service_bund_links": {
         "url_shape": "Official employer page exposing `service.bund.de/.../IMPORTE/Stellenangebote/...` links.",
         "filters": "none",

@@ -518,6 +518,16 @@ New source support should usually add or extend one of these provider modules ra
 - Requirements: none
 - Known limitations: Parses static Softgarden vacancy cards and opens matched detail pages for role-section snippets.
 
+### `successfactors_rss`
+
+- Provider: `discover.sources.successfactors` / `discover_successfactors_rss`
+- Emits candidates: yes
+- URL/source shape: SAP SuccessFactors / Jobs2Web careers URL; the RSS endpoint is derived from its origin.
+- Supported filters/options: encode a non-default `locale` in the source URL query
+- Contract fixtures: `tests/fixtures/sources/successfactors_rss/`
+- Requirements: none
+- Known limitations: Runs one official RSS keyword search per configured term; each feed may be capped by SuccessFactors.
+
 ### `teamtailor_api`
 
 - Provider: `discover.sources.teamtailor` / `discover_teamtailor_jobs`
